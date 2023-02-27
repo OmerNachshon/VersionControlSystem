@@ -1,0 +1,24 @@
+
+help for vcom
+
+commands
+checkin		used with the filename. creates a revision of the file in the current .vcom folder
+		examples: 
+		vcom checkin <filename>
+checkout	used with the filename. presents one of the last revisions of the file. without options it is presenting the last revision that was checked in
+		examples:
+		vcom checkout <filename>
+		vcom checkout -r <revision> <filename>
+login		used to login to the system
+		examples:
+		vcom login <username>
+		vcom login <username> -p <password>
+diff		used with the filename. shows the difference between two revisions of files. without flags it will show the difference between the last version checked and the current file
+		vcom diff <filename>
+		vcom diff -r <revision> <filename>
+
+options
+-r		used to mention a revision of the file
+-p		used to add the password to login
+
+
