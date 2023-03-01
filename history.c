@@ -89,9 +89,10 @@ History* get_history(File* file)
 		perror("memory error");
 		free_history(history);
 		close_file(historyFile);
-
+		return 0;
 	}
 	strcpy(history->absolutePath, file->absolutePath);
+	strcpy(history->fileName, file->relativePath);
 
 	history->history = (RevisionEntry**)malloc(0);
 	history->totalEntries = 0;
@@ -118,11 +119,10 @@ History* get_history(File* file)
 			}
 			token = strtok(line, " ");
 			entry->revision = atof(token);
-			token = strtok(NULL, " ");
+			token = strtok(NULL, "\n");
 			tm tm;
 			strptime(token, "%Y-%m-%d %H:%M:%S", &tm);
 			entry->timestamp = mktime(&tm);
-
 			history->history[history->totalEntries++] = entry;
 			// strftime(str2, sizeof(str2), "%Y-%m-%d %H:%M:%S", tm);
 		}

@@ -17,6 +17,7 @@ int update_user(char* username, char* groups[], int size);
 int is_user_exists(char* username);
 void remove_user(char* username);
 int is_user_logged_in();
+char* get_user();
 
 const char* commands[] = {"login", "checkin", "checkout", "diff"};
 void (*functions[4])() = {login, checkin, checkout, diff};
@@ -215,7 +216,36 @@ void checkout()
         if (strlen(first_arg))
         {
                 printf("Filepath: %s\n", first_arg);
-        }
+		File* file = open_file(first_arg, O_RDONLY, 48);
+        	History* history = get_history(file);
+		RevisionEntry* revision = (RevisionEntry*)malloc(sizeof(RevisionEntry));
+		int found = 0;
+		if(strlen(rev))
+		{
+			double revision_d = atof(rev);
+			for(int i = 0; i<history->totalEntries; i++)
+			{
+				if (history->history[i]->revision == revision_d)
+				{
+					revision = history->history[i];
+					found = 1;
+					break;
+				}
+			}
+			if (!found)
+			{
+				printf("revision not found.");
+				return;
+			}
+		}
+		else
+		{
+			revision = get_last_revision(history);
+		}
+		printf("locking with: %s, %s, %f, %ld\n", get_user(), history->fileName, revision->revision, revision->timestamp);
+		printf("%s\n", history->absolutePath);
+		printf("%d\n", history->totalEntries);
+	}
         else
         {
                 printf("No string specified\n");
@@ -358,4 +388,27 @@ int is_user_logged_in()
 	free(line);
 	close_file(file);
 	return 0;
+}
+char* get_user()
+{
+	char users_path[] = "users/passwd";
+        File* file = open_file(users_path, O_CREAT | O_RDONLY, 0666);
+        char* line;
+	char* token;
+        while(!is_eof(file))
+        {
+                line = read_next_line(file);
+                if ( strlen(line) >= 2 && line[strlen(line)-2] == 'y')
+                {
+			token = strtok(line, ":");
+			char* username = (char*)malloc(sizeof(char)*strlen(token));
+                        strcpy(username,token);
+			free(line);
+                        close_file(file);
+                        return username;
+                }
+        }
+        free(line);
+        close_file(file);
+        return 0;
 }
