@@ -169,10 +169,10 @@ void checkin()
                 File* file = open_file(first_arg, O_RDONLY, 0666);
 		printf("Filepath: %s\n", create_history_path(first_arg));
 		History* history = get_history(file);
-		printf("History history_file: %s\n", history->file_absolute_path);
+		printf("History history_file: %s\n", history->absolutePath);
 		for(int i = 0; i< history->totalEntries; i++)
 		{
-			printf("Filename: %s, Revision: %f\n", history->history[i]->filename, history->history[i]->revision);
+			printf("Filename: %s, Revision: %f\n", history->fileName, history->history[i]->revision);
 		}
 		add_revision_entry(history);
 		// (mode_t)48

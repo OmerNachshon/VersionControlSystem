@@ -66,21 +66,32 @@ History* get_history(File* file)
 		return 0;
 	}
 	History* history = (History*)malloc(sizeof(History));
+	history->fileName=NULL;
+	history->absolutePath=NULL;
+	history->history=NULL;
 	if (!history)
 	{
 		perror("memory error");
 		close_file(historyFile);
                 return 0;
 	}
-	history->file_absolute_path = (char*)malloc(strlen(file->absolutePath)*sizeof(char));
-	if (!history->file_absolute_path)
+	history->absolutePath = (char*)malloc(strlen(file->absolutePath)*sizeof(char));
+	if (!history->absolutePath)
         {
                 perror("memory error");
                 close_file(historyFile);
 		free(history);
                 return 0;
         }
-	strcpy(history->file_absolute_path, file->absolutePath);
+	history->fileName = (char*)malloc(strlen(file->relativePath)*sizeof(char));
+	if (!history->fileName)
+	{
+		perror("memory error");
+		free_history(history);
+		close_file(historyFile);
+
+	}
+	strcpy(history->absolutePath, file->absolutePath);
 
 	history->history = (RevisionEntry**)malloc(0);
 	history->totalEntries = 0;
@@ -98,12 +109,22 @@ History* get_history(File* file)
 			line = read_next_line(historyFile);
 			history->history = (RevisionEntry**)realloc(history->history, (history->totalEntries + 1)*sizeof(RevisionEntry*));
 			RevisionEntry* entry = (RevisionEntry*)malloc(sizeof(RevisionEntry));
+			if(!entry)
+			{
+				free(line);
+				free_history(history);
+				close_file(historyFile);
+				return NULL;
+			}
 			token = strtok(line, " ");
-			entry->filename = (char*)malloc(strlen(token)*sizeof(char));
-			strcpy(entry->filename, token);
+			entry->revision = atof(token);
 			token = strtok(NULL, " ");
-			entry->revision = strtod(token, NULL);
+			tm tm;
+			strptime(token, "%Y-%m-%d %H:%M:%S", &tm);
+			entry->timestamp = mktime(&tm);
+
 			history->history[history->totalEntries++] = entry;
+			// strftime(str2, sizeof(str2), "%Y-%m-%d %H:%M:%S", tm);
 		}
 		free(line);
 	}
@@ -123,28 +144,40 @@ RevisionEntry* get_revision(History* history, time_t timestamp)
 }
 RevisionEntry* get_last_revision(History* history)
 {
+	if(!history->totalEntries)return NULL;
 	return history->history[history->totalEntries-1];
 }
 int add_revision_entry(History* history)
 {
-	double val = get_last_revision(history)->revision + 0.001;
-	char* str = (char*)malloc(sizeof(6));
+
+	double val;
+	RevisionEntry* entry = get_last_revision(history);
+	if(entry)
+	{
+		val = entry->revision + 0.001;
+	}
+	else
+	{
+		val = 0.001;
+	}
+	char* str = (char*)malloc(sizeof(char)*6);
 	sprintf(str, "%.4f", val);
 	time_t t;
 	t = time(NULL);
+
 	// history path
-	printf("%s\n", history->file_absolute_path);
-	char* historyFilePath = create_history_path(history->file_absolute_path);
+	printf("%s\n", history->absolutePath);
+	char* historyFilePath = create_history_path(history->absolutePath);
 	File* historyFile = open_file(historyFilePath, O_RDWR | O_CREAT, 0666);
+
+	// create line
 	struct tm *tm = localtime(&t);
 	char str2[20] = {0};
 	strftime(str2, sizeof(str2), "%Y-%m-%d %H:%M:%S", tm);
-	printf("Value: %ld, String: %s\n", (long) t, str);
 	seek_file(historyFile,0,2);
 	write_data(historyFile, str);
 	char space[] = " ";
 	write_data(historyFile, space);
-
 	write_line(historyFile, str2);
 
 
@@ -160,4 +193,24 @@ int add_revision_entry(History* history)
         close_file(file);
 	*/
 	return 1;
+}
+
+void free_history(History* history)
+{
+	if(!history)return;
+	if(history->history)
+	{
+		for(int i = 0; i<history->totalEntries; i++)
+		{
+			free(history->history[i]);
+		}
+	}
+	if(history->fileName)
+	{
+		free(history->fileName);
+	}
+	if(history->absolutePath)
+	{
+		free(history->absolutePath);
+	}
 }

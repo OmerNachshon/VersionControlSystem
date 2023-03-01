@@ -5,14 +5,14 @@
 #include "files.h"
 
 typedef struct{
-	char* filename;
 	double revision;
 	time_t  timestamp;
 }RevisionEntry;
 
 typedef struct{
 	RevisionEntry** history;
-	char* file_absolute_path;
+	char* fileName;
+	char* absolutePath;
 	int totalEntries;
 }History;
 
