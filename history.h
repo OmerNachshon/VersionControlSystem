@@ -17,6 +17,7 @@ typedef struct{
 }History;
 
 char* create_history_path(char* abs_path);
+char* get_history_path(char* abs_path);
 History* get_history(File* file);
 
 RevisionEntry* get_revision(History* history, time_t timestamp);

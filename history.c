@@ -14,21 +14,28 @@ struct typedef{
         char* file_absolute_path;
 }History;
 */
-
+char* get_history_path(char* abs_path)
+{
+	char* history_path = create_history_path(abs_path);
+        history_path = (char*)realloc(history_path, strlen(history_path) + 9);
+        char str[] = "/history";
+        strcat(history_path, str);
+	return history_path;
+}
 char* create_history_path(char* abs_path)
 {
 	// some function to make a unique folder for history by name
 	// this function takes the file absolute path and make a new path
 	// therefore a filename can be transformed into the remote path of
 	// the file's repository
-	char* abs_path_cpy = (char*)malloc(strlen(abs_path)*sizeof(char));
+	char* abs_path_cpy = (char*)calloc(sizeof(char),strlen(abs_path)*sizeof(char));
 	if (!abs_path_cpy)
 	{
 		perror("memory error create_history_path");
 		return 0;
 	}
 	strcpy(abs_path_cpy, abs_path);
-	char signs[] = "'./[]{}\\ -";
+	char signs[] = "'.[]{}/\\ -";
 	char c;
 	int replaced = 0;
 	for(int i=0; i< (int)strlen(abs_path_cpy); i++)
@@ -49,6 +56,12 @@ char* create_history_path(char* abs_path)
 			if  (c <= 'Z' && c >= 'A') abs_path_cpy[i] = tolower(c);
 		}
 	}
+	struct stat st = {0};
+	if(stat(abs_path_cpy, &st) == -1)
+        {
+                printf("creating dir %s\n", abs_path_cpy);
+                mkdir(abs_path_cpy, 0770);
+        }
 	return abs_path_cpy;
 }
 
@@ -56,8 +69,10 @@ History* get_history(File* file)
 {
 	int perms = O_CREAT | O_RDWR;
 	mode_t mode = 0666;
-	char* history_path = create_history_path(file->absolutePath);
+	char* history_path = get_history_path(file->absolutePath);
 
+	//if (DEBUG)
+		printf("opened history path\n");
 	File* historyFile = open_file(history_path, perms, mode);
 	// if failed open
 	if (!historyFile)
@@ -99,7 +114,7 @@ History* get_history(File* file)
 	if (historyFile->fileSize <= 1)
 	{
 		// set file initital data
-		write_line(historyFile, history_path);
+		write_line(historyFile, file->absolutePath);
 	}
 	else
 	{
@@ -167,7 +182,7 @@ int add_revision_entry(History* history)
 
 	// history path
 	printf("%s\n", history->absolutePath);
-	char* historyFilePath = create_history_path(history->absolutePath);
+	char* historyFilePath = get_history_path(history->absolutePath);
 	File* historyFile = open_file(historyFilePath, O_RDWR | O_CREAT, 0666);
 
 	// create line

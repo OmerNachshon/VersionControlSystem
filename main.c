@@ -1,5 +1,6 @@
 #include "files.h"
 #include "history.h"
+#include "lock.h"
 #include <stdio.h>
 #include <getopt.h>
 #include <stdlib.h>
@@ -168,7 +169,12 @@ void checkin()
 	if (strlen(first_arg))
         {
                 File* file = open_file(first_arg, O_RDONLY, 0666);
-		printf("Filepath: %s\n", create_history_path(first_arg));
+		if(!file)
+		{
+			perror("error openning");
+			return;
+		}
+		printf("Filepath: %s\n", get_history_path(first_arg));
 		History* history = get_history(file);
 		printf("History history_file: %s\n", history->absolutePath);
 		for(int i = 0; i< history->totalEntries; i++)
@@ -216,7 +222,8 @@ void checkout()
         if (strlen(first_arg))
         {
                 printf("Filepath: %s\n", first_arg);
-		File* file = open_file(first_arg, O_RDONLY, 48);
+		// 48 for group rw
+		File* file = open_file(first_arg, O_RDONLY, 0666);
         	History* history = get_history(file);
 		RevisionEntry* revision = (RevisionEntry*)malloc(sizeof(RevisionEntry));
 		int found = 0;
@@ -243,6 +250,7 @@ void checkout()
 			revision = get_last_revision(history);
 		}
 		printf("locking with: %s, %s, %f, %ld\n", get_user(), history->fileName, revision->revision, revision->timestamp);
+		create_lock(file, revision, get_user());
 		printf("%s\n", history->absolutePath);
 		printf("%d\n", history->totalEntries);
 	}
