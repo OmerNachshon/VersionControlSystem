@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <fstream>
 
 using namespace std;
 bool compareRows(char *row1, int size1, char *row2, int size2)
@@ -18,9 +19,11 @@ bool compareRows(char *row1, int size1, char *row2, int size2)
     return true;
 }
 
-void diff(File *src, File *dest)
+int diff(File *src, File *dest,bool printFlag)
 {
-    int size1, size2, max, min;
+
+    int size1, size2, max, min,counter;
+    counter=0;
     char **rows1 = read_lines(src, &size1);
     char **rows2 = read_lines(dest, &size2);
     // src, dest
@@ -44,6 +47,7 @@ void diff(File *src, File *dest)
             std::string rowIndex = std::to_string(i + 1);
             v1.push_back("+ " + rowIndex + " " + rows1[i]);
             v2.push_back("- " + rowIndex + " " + rows2[i]);
+            counter+=1;
         }
     }
 
@@ -53,6 +57,7 @@ void diff(File *src, File *dest)
         {
             std::string rowIndex = std::to_string(i + 1);
             v1.push_back("+ " + rowIndex + " " + rows1[i]);
+	    counter += 1;
         }
     }
     if (max == size2)
@@ -61,13 +66,26 @@ void diff(File *src, File *dest)
         {
             std::string rowIndex = std::to_string(i + 1);
             v2.push_back("- " + rowIndex + " " + rows2[i]);
-        }
+       	    counter += 1;
+	}
     }
     // print differences
+    if(printFlag)
+    {
     for (string str1 : v1)
         std::cout << str1 ;
     cout << "\n\n\n";
     for (string str2 : v2)
         std::cout << str2 ;
     cout << "\n\n\n";
+    }
+    delete rows1;
+    free(rows2);
+    return counter;
+}
+void copyFile(char* source,char* destination)
+{
+ std::ifstream  src(source, std::ios::binary);
+ std::ofstream  dst(destination,   std::ios::binary);
+ dst << src.rdbuf();
 }

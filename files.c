@@ -6,24 +6,29 @@
 
 File* open_file(char *path, int flags, mode_t mode)
 {
+
         File* file = (File*)malloc(sizeof(File));
-        file->fd = open(path, flags, mode);
+        file->fd = open(path, flags, mode);           
         if (file->fd == -1) {
                 perror("error openning file");
                 return 0;
         }
 
-        file->absolutePath = (char*)malloc(MAX_PATH*(sizeof(char)));
+        file->absolutePath = (char*)malloc(MAX_PATH*2*(sizeof(char)));
         if ( !realpath(path, file->absolutePath) ) { perror("realpath error"); }
 
         file->relativePath = (char*)malloc(MAX_PATH*(sizeof(char)));
+
+	if(!file->relativePath)
+	{
+		perror("memory error");
+	}
         strcpy(file->relativePath,path);
 
         file->mode = mode;
         file->seek = 0;
-
         struct stat st;
-        if (fstat(file->fd, &st) == -1) {
+        if (fstat(file->fd, &st) == -1) {    //here is the error
                 perror("open file fstat");
                 return 0;
         }
@@ -31,7 +36,7 @@ File* open_file(char *path, int flags, mode_t mode)
         return file;
 }
 
-char** read_lines(File* file, int* size)
+char** read_lines(File* file, int* size)  // check read_lines
 {
         int current_size = 0;
         char** lines = (char**)malloc(current_size*sizeof(char*));

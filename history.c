@@ -1,6 +1,8 @@
+
 #include "history.h"
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
 #include <stdio.h>
 /*
 struct typedef{
@@ -20,7 +22,12 @@ char* get_history_path(char* abs_path)
         history_path = (char*)realloc(history_path, strlen(history_path) + 9);
         char str[] = "/history";
         strcat(history_path, str);
+
 	return history_path;
+}
+char* get_path_folder(char* abs_path)
+{
+	return create_history_path(abs_path);
 }
 char* create_history_path(char* abs_path)
 {
@@ -56,27 +63,31 @@ char* create_history_path(char* abs_path)
 			if  (c <= 'Z' && c >= 'A') abs_path_cpy[i] = tolower(c);
 		}
 	}
+	char * full_path=(char*)calloc(sizeof(char),(strlen(abs_path_cpy)+strlen(BASE_PATH)));
+	strcat(full_path,BASE_PATH);
+	strcat(full_path,abs_path_cpy);
 	struct stat st = {0};
-	if(stat(abs_path_cpy, &st) == -1)
+	free(abs_path_cpy);
+	if(stat(full_path, &st) == -1)
         {
-                printf("creating dir %s\n", abs_path_cpy);
-                mkdir(abs_path_cpy, 0770);
+                printf("creating dir %s\n", full_path);
+		if (access(full_path, F_OK) != 0) 
+                mkdir(full_path, 0770);
         }
-	return abs_path_cpy;
+	return full_path;
 }
 
 History* get_history(File* file)
 {
 	int perms = O_CREAT | O_RDWR;
-	mode_t mode = 0666;
+	mode_t mode = 0660;
 	char* history_path = get_history_path(file->absolutePath);
-
-	//if (DEBUG)
-		printf("opened history path\n");
 	File* historyFile = open_file(history_path, perms, mode);
+
 	// if failed open
 	if (!historyFile)
 	{
+		free(history_path);
 		perror("file error");
 		return 0;
 	}
@@ -99,6 +110,7 @@ History* get_history(File* file)
                 return 0;
         }
 	history->fileName = (char*)malloc(strlen(file->relativePath)*sizeof(char));
+
 	if (!history->fileName)
 	{
 		perror("memory error");
@@ -139,10 +151,10 @@ History* get_history(File* file)
 			strptime(token, "%Y-%m-%d %H:%M:%S", &tm);
 			entry->timestamp = mktime(&tm);
 			history->history[history->totalEntries++] = entry;
-			// strftime(str2, sizeof(str2), "%Y-%m-%d %H:%M:%S", tm);
 		}
 		free(line);
 	}
+	free(history_path);
 	close_file(historyFile);
 	return history;
 }
@@ -169,21 +181,19 @@ int add_revision_entry(History* history)
 	RevisionEntry* entry = get_last_revision(history);
 	if(entry)
 	{
-		val = entry->revision + 0.001;
+		val = entry->revision + 1;
 	}
 	else
 	{
-		val = 0.001;
+		val = 1;
 	}
 	char* str = (char*)malloc(sizeof(char)*6);
-	sprintf(str, "%.4f", val);
+	sprintf(str, "%f", val);
 	time_t t;
 	t = time(NULL);
 
-	// history path
-	printf("%s\n", history->absolutePath);
 	char* historyFilePath = get_history_path(history->absolutePath);
-	File* historyFile = open_file(historyFilePath, O_RDWR | O_CREAT, 0666);
+	File* historyFile = open_file(historyFilePath, O_RDWR | O_CREAT, 0666); 
 
 	// create line
 	struct tm *tm = localtime(&t);
@@ -195,18 +205,6 @@ int add_revision_entry(History* history)
 	write_data(historyFile, space);
 	write_line(historyFile, str2);
 
-
-	/*
-	char filepath[] = "users/passwd";
-        int perms = O_CREAT | O_RDWR;
-        int mode = 0666;
-        File* file = open_file(filepath, perms, mode);
-        seek_file(file, 0, 2);
-        printf("File opened \n");
-
-        write_line(file, line);
-        close_file(file);
-	*/
 	return 1;
 }
 

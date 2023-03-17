@@ -3,15 +3,18 @@
 #include "lock.h"
 #include <stdio.h>
 #include <getopt.h>
+#include "diff.h"
 #include <stdlib.h>
+#include <dirent.h>
+#include <errno.h>
 #include <string.h>
 
 void show_help();
-void process_arguments(int argc, char *argv[], char* rev, char* pass, int* var_ind);
+void process_arguments(int argc, char *argv[], char* rev, char* pass, int* lock_co, int* var_ind);
 void login();
 void checkin();
 void checkout();
-void diff();
+void diff2();
 char* create_user_entry(char* username, char* groups[], int size);
 int add_user(char* username, char* groups[], int size);
 int update_user(char* username, char* groups[], int size);
@@ -21,11 +24,13 @@ int is_user_logged_in();
 char* get_user();
 
 const char* commands[] = {"login", "checkin", "checkout", "diff"};
-void (*functions[4])() = {login, checkin, checkout, diff};
+void (*functions[4])() = {login, checkin, checkout, diff2};
 
 static char* first_arg = (char*)malloc(0);
 static char* rev = (char*)malloc(0);
 static char* pass = (char*)malloc(0);
+static char* lock_str = (char*)malloc(0);
+static int lock_co = 0;
 
 
 int main(int argc, char* argv[])
@@ -39,8 +44,13 @@ int main(int argc, char* argv[])
 
 	int var_ind = 0;
 
-	process_arguments(argc, argv, rev, pass, &var_ind);
-
+	process_arguments(argc, argv, rev, pass, &lock_co, &var_ind);
+	if ( lock_co && strcmp(lock_str, "lock"))
+	{
+		printf("The use of the command is incorrect, use: vcom [option <command>] <command>");
+		show_help();
+                return 0;
+	}
 	if ( var_ind + 3 != argc )
 	{
 		printf("The use of the command is incorrect, use: vcom [option <command>] <command>");
@@ -77,16 +87,22 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-void process_arguments(int argc, char *argv[], char* str, char* pass, int* var_ind) {
+void process_arguments(int argc, char *argv[], char* str, char* pass, int* lock_co, int* var_ind) {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "r:p:")) != -1) {
+	while ((opt = getopt(argc, argv, "r:p:l:")) != -1) {
 		switch (opt) {
 		case 'r':
 			strcpy(str, optarg);
 			*(var_ind) = *(var_ind) + 2;
 			break;
 		case 'p':
+			strcpy(pass, optarg);
+			*(var_ind) = *(var_ind) + 2;
+			break;
+		case 'l':
+			*(lock_co) = 1;
+			strcpy(lock_str, optarg);
 			strcpy(pass, optarg);
 			*(var_ind) = *(var_ind) + 2;
 			break;
@@ -103,6 +119,7 @@ void show_help()
 	File* file = open_file(filepath, O_CREAT | O_RDONLY, 0666);
 	while( !is_eof(file) )
 		printf("%s", read_next_line(file));
+	close_file(file);
 }
 
 void login()
@@ -146,7 +163,7 @@ void login()
 		{
 			linecpy[strlen(linecpy)-2] = 'x';
 		}
-                seek_file(file, (-1)*strlen(linecpy), 1);
+		seek_file(file, (-1)*strlen(linecpy), 1);
 		write_data(file, linecpy);
 		free(linecpy);
 	}
@@ -160,31 +177,112 @@ void login()
 
 void checkin()
 {
-	if (!is_user_logged_in())
+	if (!is_user_logged_in())	//check if a user is logged
         {
                 printf("No user logged in\n");
                 return;
         }
 
+	// check if .vcom exists, otherwise ,create it
+	DIR* hiddenFile= opendir(".vcom");
+	if(!hiddenFile)
+		mkdir(".vcom",0777);
+
 	if (strlen(first_arg))
         {
-                File* file = open_file(first_arg, O_RDONLY, 0666);
+		File* file = open_file(first_arg, O_RDONLY, 0660);
 		if(!file)
 		{
 			perror("error openning");
 			return;
 		}
-		printf("Filepath: %s\n", get_history_path(first_arg));
-		History* history = get_history(file);
-		printf("History history_file: %s\n", history->absolutePath);
-		for(int i = 0; i< history->totalEntries; i++)
+		// check lock // remove later, code arrived here!
+		if (is_locked(file))
 		{
-			printf("Filename: %s, Revision: %f\n", history->fileName, history->history[i]->revision);
+			if (!has_local_key(file))
+			{
+				// delete lock from folder
+				// delete local file lock
+				printf("unlocking file and checking in\n");
+				char* username = get_user();
+				int is_unlocked = unlock_file(file, username);
+				if (is_unlocked)
+				{
+					printf("file is unlocked for write");
+				} 
+				else
+				{
+					printf("Could not perform checkin, the file is locked under other user's name\n");
+				}
+				
+				free(username);
+			}
+			else
+			{
+				printf("Could not perform checkin, file is locked for checkin\n");
+				return;
+			}
 		}
-		add_revision_entry(history);
-		// (mode_t)48
-		// add backup with perms and mode
-		// add diff
+		
+		History* history = get_history(file);	
+		RevisionEntry* last_revision=get_last_revision(history);
+		
+		if(!last_revision)	//case first revision
+		{
+			add_revision_entry(history);
+			char new_dir[127];
+			char * folder_path=get_path_folder(history->absolutePath);
+			strcpy(new_dir,folder_path);
+			mkdir(new_dir,0777);
+			strcat(new_dir,"/1");
+			rev=(char*)realloc(rev,sizeof(char)*sizeof("1"));
+			strcpy(rev,"1");
+			copyFile(first_arg,new_dir);		//save revision as file copy
+			free(folder_path);
+		}
+		else	//needs to check if changes were made , using diff and add new revision
+		{
+			//prep for getting last revision file
+			printf("last revision: %f\n", last_revision->revision);
+			char path_last_revision_file[127];
+			char * folder_path=get_path_folder(history->absolutePath);
+			char last_revision_string[100];
+    		sprintf(last_revision_string, "%d", (int)last_revision->revision);
+			strcpy(path_last_revision_file,folder_path);
+			rev=(char*)realloc(rev,sizeof(char)*sizeof(last_revision_string));
+			strcpy(rev,last_revision_string);
+			strcat(path_last_revision_file,"/");
+			strcat(path_last_revision_file,last_revision_string);
+			File* file_last_revision = open_file(path_last_revision_file, O_RDONLY, 0660);	//open last revision file
+			if(!file_last_revision)
+			{
+				perror("error openning");
+				return;
+			}
+			int num_rows_different=diff(file,file_last_revision,0);	// check if changes were made
+			if(num_rows_different==0)
+				printf("No changes were made since last revision\n");
+			else	//save changes as new revision
+			{
+				add_revision_entry(history);
+				history = get_history(file);
+				last_revision=get_last_revision(history);
+				sprintf(last_revision_string, "%d", (int)last_revision->revision);
+				rev=(char*)realloc(rev,sizeof(char)*sizeof(last_revision_string));
+				strcpy(rev,last_revision_string);
+				char new_rev[255];
+				char * folder_path_1=get_path_folder(history->absolutePath);
+				strcpy(new_rev,folder_path_1);
+				strcat(new_rev,"/");
+				strcat(new_rev,last_revision_string);
+				copyFile(first_arg,new_rev);		//save revision as file copy
+				free(folder_path_1);
+			}
+			free(folder_path);
+			close_file(file_last_revision);
+		}
+		free_history(history);
+		
 	}
         else
         {
@@ -201,12 +299,11 @@ void checkin()
                 printf("Revision: Last known\n");
 		// rev = fetch_last_revision(first_arg);
         }
-	// todo - lock check
-	// todo - check login
+	free(rev);
 }
 void checkout()
 {
-	if (!is_user_logged_in())
+	if (!is_user_logged_in()) // authorize
         {
                 printf("No user logged in\n");
                 return;
@@ -221,12 +318,32 @@ void checkout()
         }
         if (strlen(first_arg))
         {
+
                 printf("Filepath: %s\n", first_arg);
+		if (access(first_arg, F_OK) != 0) // check perms
+		{
+			printf("The files has no permissions for the user\n");
+			return;
+		}
 		// 48 for group rw
-		File* file = open_file(first_arg, O_RDONLY, 0666);
-        	History* history = get_history(file);
+		File* file = open_file(first_arg, O_RDONLY, 0660);
+		History* history = get_history(file);
 		RevisionEntry* revision = (RevisionEntry*)malloc(sizeof(RevisionEntry));
 		int found = 0;
+		int locked = is_locked(file);
+		if (!locked && lock_co) // check lock exists, add check request to lock
+		{
+			printf("locking with: %s, %s, %f, %ld\n", get_user(), history->fileName, revision->revision, revision->timestamp);
+        	        create_lock(file, revision, get_user());
+                	create_local_key(file, revision, get_user());
+		}
+		else if (locked)
+		{
+			printf("file is locked, and cannot be checked out\n");
+			close_file(file);
+			return;
+		}
+
 		if(strlen(rev))
 		{
 			double revision_d = atof(rev);
@@ -249,19 +366,49 @@ void checkout()
 		{
 			revision = get_last_revision(history);
 		}
-		printf("locking with: %s, %s, %f, %ld\n", get_user(), history->fileName, revision->revision, revision->timestamp);
-		create_lock(file, revision, get_user());
-		printf("%s\n", history->absolutePath);
-		printf("%d\n", history->totalEntries);
+		// make checkout with the revision
+		char revision_num[10];
+		char dot[2] = ".";
+		sprintf(revision_num, "%d", (int)revision->revision);
+		char* new_name = (char*)calloc(sizeof(char), CHUNK);
+		char* token;
+		token = strtok(first_arg, ".");
+		strcat(new_name, token);
+		strcat(new_name, revision_num);
+
+		if (strcmp(token, first_arg))
+		{
+			strcat(new_name, dot);
+			strcat(new_name, first_arg);
+		}
+		printf("new file name is: %s\n", new_name);
+		File* newFile = open_file(new_name, O_CREAT | O_RDWR, 0660);
+		char archived_path[255];
+                char * folder_path_1=get_path_folder(history->absolutePath);
+		strcpy(archived_path,folder_path_1);
+                strcat(archived_path,"/");
+                strcat(archived_path, revision_num);
+		File* archivedFile = open_file(archived_path, O_RDONLY, 0660);
+		char* line;
+		while(!is_eof(archivedFile))
+		{
+			line = read_next_line(archivedFile);
+			write_data(newFile, line);
+		}
+		close_file(newFile);
+		close_file(archivedFile);
+		close_file(file);
+		free_history(history);
+		free(line);
 	}
         else
         {
-                printf("No string specified\n");
+        	printf("No string specified\n");
 		show_help();
 		return;
         }
 }
-void diff()
+void diff2()
 {
 	if (!is_user_logged_in())
         {
@@ -276,18 +423,54 @@ void diff()
 	{
 		printf("Revision: Last known\n");
 	}
+
 	if (strlen(first_arg))
+        {
+                printf("Filepath: %s\n", first_arg);
+        }
+        else
+        {
+                show_help();
+                return;
+        }
+	File* file = open_file(first_arg, O_RDONLY, 0660);
+	History* history = get_history(file);
+	RevisionEntry* revision = (RevisionEntry*)malloc(sizeof(RevisionEntry));
+	if(strlen(rev))
 	{
-	        printf("Filepath: %s\n", first_arg);
+		int found = 0;
+		double revision_d = atof(rev);
+		for(int i = 0; i<history->totalEntries; i++)
+		{
+			if (history->history[i]->revision == revision_d)
+			{
+				revision = history->history[i];
+				found = 1;
+				break;
+			}
+		}
+		if (!found)
+		{
+			printf("revision not found.");
+			return;
+		}
 	}
 	else
-	{
-                printf("No string specified\n");
-		show_help();
-		return;
+        {
+		revision = get_last_revision(history);
 	}
-}
+	char revision_num[10];
+        sprintf(revision_num, "%d", (int)revision->revision);
+	char archived_path[255];
 
+        char * folder_path_1=get_path_folder(history->absolutePath);
+        strcpy(archived_path,folder_path_1);
+        strcat(archived_path,"/");
+        strcat(archived_path, revision_num);
+        File* archivedFile = open_file(archived_path, O_RDONLY, 0660);
+	diff(file, archivedFile, 1);
+	return;
+}
 char* create_user_entry(char* username, char* groups[], int size)
 {
 	int len = 0;

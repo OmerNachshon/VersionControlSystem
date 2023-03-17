@@ -9,6 +9,8 @@ checkout	used with the filename. presents one of the last revisions of the file.
 		examples:
 		vcom checkout <filename>
 		vcom checkout -r <revision> <filename>
+		vcom checkout -l lock -r <revision> <filename>
+		vcom checkout -l lock <filename>
 login		used to login to the system
 		examples:
 		vcom login <username>
@@ -20,5 +22,5 @@ diff		used with the filename. shows the difference between two revisions of file
 options
 -r		used to mention a revision of the file
 -p		used to add the password to login
-
+-l		used to lock the file to changes on checkout
 
